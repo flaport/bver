@@ -4,6 +4,7 @@ mod finders;
 mod git;
 mod loader;
 mod schema;
+mod tui;
 mod version;
 
 use bump::bump_version;

@@ -1,22 +1,14 @@
-use std::collections::HashMap;
 use std::fs;
-use std::io::{self, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::cast::cast_version;
 use crate::finders::find_project_root;
 use crate::git::{maybe_run_pre_commit, run_git_actions};
 use crate::schema::{Config, FileKind, OnInvalidVersion};
+use crate::tui::{select_changes, ProposedChange};
 use crate::version::validate_version;
 
 const DEFAULT_CONTEXT_LINES: usize = 3;
-
-/// Pending changes for a file: list of line indices to update
-struct PendingChanges {
-    old_version: String,
-    new_version: String,
-    accepted_lines: Vec<usize>,
-}
 
 /// Format a path relative to project root, bold, with folder and filename in different colors
 fn pretty_path(path: &Path) -> String {
@@ -51,13 +43,10 @@ pub fn bump_version(config: &Config, target: &str, force: bool) -> Result<(), St
     let context_lines = config.context_lines.unwrap_or(DEFAULT_CONTEXT_LINES);
     let project_root = find_project_root().ok_or("Could not find project root")?;
 
-    println!("Bumping version: {current_version} -> {new_version}");
-    println!();
-
     let default_kind = config.default_kind;
 
-    // Collect all pending changes first
-    let mut all_changes: HashMap<PathBuf, PendingChanges> = HashMap::new();
+    // Collect all proposed changes
+    let mut proposed_changes: Vec<ProposedChange> = Vec::new();
 
     for file_config in &config.files {
         let file_path = project_root.join(&file_config.src);
@@ -72,18 +61,34 @@ pub fn bump_version(config: &Config, target: &str, force: bool) -> Result<(), St
         let old_file_version = get_file_version(current_version, kind, config.on_invalid_version, &file_config.src)?;
         let new_file_version = get_file_version(&new_version, kind, config.on_invalid_version, &file_config.src)?;
 
-        if let Some(changes) = collect_file_changes(&file_path, &old_file_version, &new_file_version, context_lines)? {
-            all_changes.insert(file_path, changes);
-        }
+        let file_changes = collect_file_changes(&file_path, &old_file_version, &new_file_version, context_lines)?;
+        proposed_changes.extend(file_changes);
     }
 
-    // Apply all changes
-    if !all_changes.is_empty() {
-        println!();
-        println!("Applying changes...");
-        for (path, changes) in &all_changes {
-            apply_changes(path, &changes.accepted_lines, &changes.old_version, &changes.new_version)?;
-        }
+    if proposed_changes.is_empty() {
+        println!("No changes to apply.");
+        return Ok(());
+    }
+
+    // Show TUI to select changes
+    let confirmed = select_changes(&mut proposed_changes)
+        .map_err(|e| format!("TUI error: {e}"))?;
+
+    if !confirmed {
+        println!("Cancelled.");
+        return Ok(());
+    }
+
+    // Apply selected changes
+    let selected: Vec<_> = proposed_changes.iter().filter(|c| c.selected).collect();
+    if selected.is_empty() {
+        println!("No changes selected.");
+        return Ok(());
+    }
+
+    println!("Applying {} change(s)...", selected.len());
+    for change in &selected {
+        apply_change(change)?;
     }
 
     // Run pre-commit hooks if configured
@@ -356,7 +361,7 @@ fn collect_file_changes(
     old_version: &str,
     new_version: &str,
     context_lines: usize,
-) -> Result<Option<PendingChanges>, String> {
+) -> Result<Vec<ProposedChange>, String> {
     let content = fs::read_to_string(path).map_err(|e| format!("Failed to read {}: {e}", path.display()))?;
     let lines: Vec<&str> = content.lines().collect();
 
@@ -375,88 +380,49 @@ fn collect_file_changes(
         ));
     }
 
-    println!("{}:", pretty_path(path));
-
-    let mut accepted_lines: Vec<usize> = Vec::new();
+    let mut changes = Vec::new();
 
     for &line_idx in &occurrences {
-        if show_diff_and_prompt(&lines, line_idx, old_version, new_version, context_lines)? {
-            accepted_lines.push(line_idx);
-        }
+        let start = line_idx.saturating_sub(context_lines);
+        let end = (line_idx + context_lines + 1).min(lines.len());
+
+        let context_before: Vec<String> = lines[start..line_idx]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let context_after: Vec<String> = lines[(line_idx + 1)..end]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+
+        let old_line = lines[line_idx].to_string();
+        let new_line = old_line.replace(old_version, new_version);
+
+        changes.push(ProposedChange {
+            path: path.to_path_buf(),
+            line_idx,
+            old_line,
+            new_line,
+            context_before,
+            context_after,
+            selected: true,
+        });
     }
 
-    println!();
-
-    if accepted_lines.is_empty() {
-        Ok(None)
-    } else {
-        Ok(Some(PendingChanges {
-            old_version: old_version.to_string(),
-            new_version: new_version.to_string(),
-            accepted_lines,
-        }))
-    }
+    Ok(changes)
 }
 
-fn show_diff_and_prompt(
-    lines: &[&str],
-    line_idx: usize,
-    old_version: &str,
-    new_version: &str,
-    context_lines: usize,
-) -> Result<bool, String> {
-    let start = line_idx.saturating_sub(context_lines);
-    let end = (line_idx + context_lines + 1).min(lines.len());
-
-    for i in start..end {
-        let line_num = i + 1;
-        let line = lines[i];
-
-        if i == line_idx {
-            // Show the old line in red
-            println!(
-                "\x1b[31m- {line_num:4} | {}\x1b[0m",
-                line
-            );
-            // Show the new line in green
-            let new_line = line.replace(old_version, new_version);
-            println!(
-                "\x1b[32m+ {line_num:4} | {}\x1b[0m",
-                new_line
-            );
-        } else {
-            println!("  {line_num:4} | {line}");
-        }
-    }
-
-    println!();
-    print!("Apply this change? [Y/n]: ");
-    io::stdout().flush().map_err(|e| e.to_string())?;
-
-    let mut input = String::new();
-    io::stdin()
-        .read_line(&mut input)
-        .map_err(|e| e.to_string())?;
-
-    let input = input.trim().to_lowercase();
-    Ok(input.is_empty() || input == "y" || input == "yes")
-}
-
-fn apply_changes(
-    path: &Path,
-    accepted_lines: &[usize],
-    old_version: &str,
-    new_version: &str,
-) -> Result<(), String> {
-    let original = fs::read_to_string(path).map_err(|e| format!("Failed to read {}: {e}", pretty_path(path)))?;
+fn apply_change(change: &ProposedChange) -> Result<(), String> {
+    let original = fs::read_to_string(&change.path)
+        .map_err(|e| format!("Failed to read {}: {e}", pretty_path(&change.path)))?;
     let lines: Vec<&str> = original.lines().collect();
 
     let new_content: Vec<String> = lines
         .iter()
         .enumerate()
         .map(|(i, line)| {
-            if accepted_lines.contains(&i) {
-                line.replace(old_version, new_version)
+            if i == change.line_idx {
+                change.new_line.clone()
             } else {
                 (*line).to_string()
             }
@@ -472,9 +438,10 @@ fn apply_changes(
         new_content
     };
 
-    fs::write(path, &new_content).map_err(|e| format!("Failed to write {}: {e}", pretty_path(path)))?;
+    fs::write(&change.path, &new_content)
+        .map_err(|e| format!("Failed to write {}: {e}", pretty_path(&change.path)))?;
 
-    println!("Updated: {}", pretty_path(path));
+    println!("  Updated {}:{}", pretty_path(&change.path), change.line_idx + 1);
     Ok(())
 }
 
