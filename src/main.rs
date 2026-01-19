@@ -2,6 +2,7 @@ mod bump;
 mod finders;
 mod loader;
 mod schema;
+mod version;
 
 use bump::bump_version;
 use clap::{Parser, Subcommand};

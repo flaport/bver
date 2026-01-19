@@ -3,7 +3,8 @@ use std::io::{self, Write};
 use std::path::Path;
 
 use crate::finders::find_project_root;
-use crate::schema::Config;
+use crate::schema::{Config, FileKind};
+use crate::version::validate_version;
 
 const DEFAULT_CONTEXT_LINES: usize = 3;
 
@@ -24,6 +25,8 @@ pub fn bump_version(config: &Config, target: &str) -> Result<(), String> {
     println!("Bumping version: {current_version} -> {new_version}");
     println!();
 
+    let default_kind = config.default_kind;
+
     for file_config in &config.files {
         let file_path = project_root.join(&file_config.src);
         if !file_path.exists() {
@@ -31,15 +34,19 @@ pub fn bump_version(config: &Config, target: &str) -> Result<(), String> {
             continue;
         }
 
-        process_file(&file_path, current_version, &new_version, context_lines)?;
+        let kind = file_config.kind.unwrap_or(default_kind);
+
+        // Validate the new version against the file kind
+        validate_version(&new_version, kind)?;
+
+        process_file(&file_path, current_version, &new_version, kind, context_lines)?;
     }
 
     Ok(())
 }
 
 fn is_version_string(s: &str) -> bool {
-    let parts: Vec<&str> = s.split('.').collect();
-    parts.len() == 3 && parts.iter().all(|p| p.parse::<u32>().is_ok())
+    !matches!(s, "major" | "minor" | "patch")
 }
 
 fn compute_new_version(current: &str, component: &str) -> Result<String, String> {
@@ -74,6 +81,7 @@ fn process_file(
     path: &Path,
     old_version: &str,
     new_version: &str,
+    _kind: FileKind,
     context_lines: usize,
 ) -> Result<(), String> {
     let content = fs::read_to_string(path).map_err(|e| format!("Failed to read {}: {e}", path.display()))?;
