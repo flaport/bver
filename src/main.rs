@@ -18,6 +18,8 @@ struct Cli {
 enum Commands {
     /// Show current version
     Current,
+    /// Show full config
+    Config,
     /// Bump version
     Bump {
         /// Version component to bump: major, minor, or patch
@@ -39,6 +41,13 @@ fn main() {
                 } else {
                     eprintln!("No current_version found in config");
                 }
+            } else {
+                eprintln!("No config found");
+            }
+        }
+        Commands::Config => {
+            if let Some(config) = config {
+                println!("{}", toml::to_string_pretty(&config).unwrap());
             } else {
                 eprintln!("No config found");
             }
