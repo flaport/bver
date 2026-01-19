@@ -37,7 +37,15 @@ pub fn bump_version(config: &Config, target: &str) -> Result<(), String> {
         let kind = file_config.kind.unwrap_or(default_kind);
 
         // Validate the new version against the file kind
-        validate_version(&new_version, kind)?;
+        validate_version(&new_version, kind).map_err(|e| {
+            format!(
+                "Invalid version '{}' for file '{}' (kind: {:?}): {}",
+                new_version,
+                file_config.src.display(),
+                kind,
+                e
+            )
+        })?;
 
         process_file(&file_path, current_version, &new_version, kind, context_lines)?;
     }
