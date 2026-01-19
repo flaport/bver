@@ -80,6 +80,7 @@ pub fn run_git_actions(
     action: GitAction,
     old_version: &str,
     new_version: &str,
+    force: bool,
 ) -> Result<(), String> {
     match action {
         GitAction::Disabled => Ok(()),
@@ -91,15 +92,15 @@ pub fn run_git_actions(
         GitAction::CommitAndTag => {
             git_add_all()?;
             git_commit(old_version, new_version)?;
-            git_tag(new_version)?;
+            git_tag(new_version, force)?;
             Ok(())
         }
         GitAction::CommitTagAndPush => {
             git_add_all()?;
             git_commit(old_version, new_version)?;
-            git_tag(new_version)?;
-            git_push()?;
-            git_push_tag(new_version)?;
+            git_tag(new_version, force)?;
+            git_push(force)?;
+            git_push_tag(new_version, force)?;
             Ok(())
         }
     }
@@ -114,15 +115,27 @@ fn git_commit(old_version: &str, new_version: &str) -> Result<(), String> {
     git(&["commit", "-m", &msg])
 }
 
-fn git_tag(version: &str) -> Result<(), String> {
+fn git_tag(version: &str, force: bool) -> Result<(), String> {
     let msg = format!("Release {}", version);
-    git(&["tag", "-a", version, "-m", &msg])
+    if force {
+        git(&["tag", "-a", version, "-m", &msg, "-f"])
+    } else {
+        git(&["tag", "-a", version, "-m", &msg])
+    }
 }
 
-fn git_push() -> Result<(), String> {
-    git(&["push"])
+fn git_push(force: bool) -> Result<(), String> {
+    if force {
+        git(&["push", "--force"])
+    } else {
+        git(&["push"])
+    }
 }
 
-fn git_push_tag(version: &str) -> Result<(), String> {
-    git(&["push", "origin", version])
+fn git_push_tag(version: &str, force: bool) -> Result<(), String> {
+    if force {
+        git(&["push", "origin", version, "--force"])
+    } else {
+        git(&["push", "origin", version])
+    }
 }

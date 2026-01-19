@@ -30,6 +30,10 @@ enum Commands {
         /// Version component (major, minor, patch) or explicit version (e.g. 1.2.3)
         #[arg(default_value = "patch")]
         target: String,
+
+        /// Force git operations (tag, push)
+        #[arg(short, long)]
+        force: bool,
     },
 }
 
@@ -57,9 +61,9 @@ fn main() {
                 eprintln!("No config found");
             }
         }
-        Commands::Bump { target } => {
+        Commands::Bump { target, force } => {
             if let Some(config) = config {
-                if let Err(e) = bump_version(&config, &target) {
+                if let Err(e) = bump_version(&config, &target, force) {
                     eprintln!("Error: {e}");
                 }
             } else {

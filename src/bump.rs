@@ -29,7 +29,7 @@ fn pretty_path(path: &Path) -> String {
     }
 }
 
-pub fn bump_version(config: &Config, target: &str) -> Result<(), String> {
+pub fn bump_version(config: &Config, target: &str, force: bool) -> Result<(), String> {
     let current_version = config
         .current_version
         .as_ref()
@@ -68,7 +68,7 @@ pub fn bump_version(config: &Config, target: &str) -> Result<(), String> {
     maybe_run_pre_commit(config.run_pre_commit)?;
 
     // Run git actions if configured
-    run_git_actions(config.git_action, current_version, &new_version)?;
+    run_git_actions(config.git_action, current_version, &new_version, force)?;
 
     Ok(())
 }
