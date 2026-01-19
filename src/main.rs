@@ -1,6 +1,7 @@
 mod bump;
 mod cast;
 mod finders;
+mod git;
 mod loader;
 mod schema;
 mod version;

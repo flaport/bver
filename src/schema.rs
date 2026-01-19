@@ -11,6 +11,8 @@ pub struct Config {
     pub default_kind: FileKind,
     #[serde(default)]
     pub on_invalid_version: OnInvalidVersion,
+    #[serde(default)]
+    pub run_pre_commit: RunPreCommit,
     #[serde(default, rename = "file")]
     pub files: Vec<FileConfig>,
 }
@@ -38,4 +40,13 @@ pub enum OnInvalidVersion {
     #[default]
     Error,
     Cast,
+}
+
+#[derive(Debug, Deserialize, Serialize, Default, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum RunPreCommit {
+    Enabled,
+    Disabled,
+    #[default]
+    WhenPresent,
 }
