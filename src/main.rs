@@ -3,15 +3,15 @@ mod loader;
 mod schema;
 
 use clap::{Parser, Subcommand};
-use finders::find_project_root;
 use loader::load_config;
 
 #[derive(Parser)]
 #[command(name = "vrsn")]
 #[command(about = "A version management tool")]
+#[command(arg_required_else_help = true)]
 struct Cli {
     #[command(subcommand)]
-    command: Option<Commands>,
+    command: Commands,
 }
 
 #[derive(Subcommand)]
@@ -32,7 +32,7 @@ fn main() {
     let config = load_config();
 
     match cli.command {
-        Some(Commands::Current) => {
+        Commands::Current => {
             if let Some(config) = config {
                 if let Some(version) = config.current_version {
                     println!("{version}");
@@ -43,12 +43,8 @@ fn main() {
                 eprintln!("No config found");
             }
         }
-        Some(Commands::Bump { component }) => {
+        Commands::Bump { component } => {
             println!("Bump {component} (not yet implemented)");
-        }
-        None => {
-            println!("project_root: {:?}", find_project_root());
-            println!("config: {config:?}");
         }
     }
 }
