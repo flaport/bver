@@ -5,7 +5,8 @@ pub fn validate_version(version: &str, kind: FileKind) -> Result<(), String> {
     match kind {
         FileKind::Any => Ok(()),
         FileKind::Simple => validate_simple(version),
-        FileKind::Python => validate_pep440(version),
+        FileKind::Python => validate_python(version),
+        FileKind::Javascript => validate_javascript(version),
     }
 }
 
@@ -26,7 +27,7 @@ fn validate_simple(version: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Validate a version string according to PEP 440
+/// Validate a Python version string (PEP 440)
 /// https://peps.python.org/pep-0440/
 ///
 /// Valid forms:
@@ -40,7 +41,7 @@ fn validate_simple(version: &str) -> Result<(), String> {
 /// - N[.N]+{a|b|rc}N.postN.devN       (e.g., 1.0a1.post1.dev1)
 /// - Any of the above with +local     (e.g., 1.0+local.version)
 /// - Any of the above with N! prefix  (e.g., 1!1.0)
-pub fn validate_pep440(version: &str) -> Result<(), String> {
+fn validate_python(version: &str) -> Result<(), String> {
     if version.is_empty() {
         return Err("Version string cannot be empty".to_string());
     }
@@ -157,6 +158,68 @@ fn is_valid_release(release: &str) -> bool {
     })
 }
 
+/// Validate a JavaScript/npm version string
+/// https://semver.org/
+///
+/// Format: major.minor.patch[-prerelease][+build]
+/// - Prerelease: -alpha.1, -beta.2, -rc.1, etc.
+/// - Build metadata: +build.123 (ignored for precedence)
+///
+/// Note: post and dev releases are NOT supported in npm
+fn validate_javascript(version: &str) -> Result<(), String> {
+    if version.is_empty() {
+        return Err("Version string cannot be empty".to_string());
+    }
+
+    // Split off build metadata (e.g., "1.0.0+build")
+    let version = if let Some(pos) = version.find('+') {
+        let build = &version[pos + 1..];
+        if build.is_empty() || !is_valid_semver_identifier(build) {
+            return Err(format!("Invalid build metadata: {build}"));
+        }
+        &version[..pos]
+    } else {
+        version
+    };
+
+    // Split off prerelease (e.g., "1.0.0-alpha.1")
+    let (release, prerelease) = if let Some(pos) = version.find('-') {
+        (&version[..pos], Some(&version[pos + 1..]))
+    } else {
+        (version, None)
+    };
+
+    // Validate release part (must be exactly major.minor.patch)
+    let parts: Vec<&str> = release.split('.').collect();
+    if parts.len() != 3 {
+        return Err(format!(
+            "Invalid semver: {release}. Expected format: major.minor.patch"
+        ));
+    }
+    for (i, part) in parts.iter().enumerate() {
+        let name = ["major", "minor", "patch"][i];
+        if part.parse::<u32>().is_err() {
+            return Err(format!("Invalid {name} version: {part}"));
+        }
+    }
+
+    // Validate prerelease if present
+    if let Some(pre) = prerelease {
+        if pre.is_empty() || !is_valid_semver_identifier(pre) {
+            return Err(format!("Invalid prerelease: {pre}"));
+        }
+    }
+
+    Ok(())
+}
+
+fn is_valid_semver_identifier(id: &str) -> bool {
+    // Identifiers are dot-separated, each part is alphanumeric or hyphen
+    id.split('.').all(|part| {
+        !part.is_empty() && part.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+    })
+}
+
 fn parse_suffixes(suffix: &str) -> Result<(), String> {
     if suffix.is_empty() {
         return Ok(());
@@ -221,64 +284,97 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_valid_simple_versions() {
-        assert!(validate_pep440("1").is_ok());
-        assert!(validate_pep440("1.0").is_ok());
-        assert!(validate_pep440("1.0.0").is_ok());
-        assert!(validate_pep440("1.2.3").is_ok());
-        assert!(validate_pep440("1.2.3.4").is_ok());
-        assert!(validate_pep440("0.0.1").is_ok());
-        assert!(validate_pep440("10.20.30").is_ok());
+    fn test_valid_python_versions() {
+        assert!(validate_python("1").is_ok());
+        assert!(validate_python("1.0").is_ok());
+        assert!(validate_python("1.0.0").is_ok());
+        assert!(validate_python("1.2.3").is_ok());
+        assert!(validate_python("1.2.3.4").is_ok());
+        assert!(validate_python("0.0.1").is_ok());
+        assert!(validate_python("10.20.30").is_ok());
     }
 
     #[test]
-    fn test_valid_prerelease_versions() {
-        assert!(validate_pep440("1.0a1").is_ok());
-        assert!(validate_pep440("1.0b2").is_ok());
-        assert!(validate_pep440("1.0rc1").is_ok());
-        assert!(validate_pep440("1.0alpha1").is_ok());
-        assert!(validate_pep440("1.0beta2").is_ok());
-        assert!(validate_pep440("1.0.0a1").is_ok());
-        assert!(validate_pep440("1.0c1").is_ok());
-        assert!(validate_pep440("1.0preview1").is_ok());
+    fn test_valid_python_prerelease_versions() {
+        assert!(validate_python("1.0a1").is_ok());
+        assert!(validate_python("1.0b2").is_ok());
+        assert!(validate_python("1.0rc1").is_ok());
+        assert!(validate_python("1.0alpha1").is_ok());
+        assert!(validate_python("1.0beta2").is_ok());
+        assert!(validate_python("1.0.0a1").is_ok());
+        assert!(validate_python("1.0c1").is_ok());
+        assert!(validate_python("1.0preview1").is_ok());
     }
 
     #[test]
-    fn test_valid_post_versions() {
-        assert!(validate_pep440("1.0.post1").is_ok());
-        assert!(validate_pep440("1.0.0.post1").is_ok());
-        assert!(validate_pep440("1.0a1.post1").is_ok());
+    fn test_valid_python_post_versions() {
+        assert!(validate_python("1.0.post1").is_ok());
+        assert!(validate_python("1.0.0.post1").is_ok());
+        assert!(validate_python("1.0a1.post1").is_ok());
     }
 
     #[test]
-    fn test_valid_dev_versions() {
-        assert!(validate_pep440("1.0.dev1").is_ok());
-        assert!(validate_pep440("1.0.0.dev1").is_ok());
-        assert!(validate_pep440("1.0a1.dev1").is_ok());
-        assert!(validate_pep440("1.0.post1.dev1").is_ok());
+    fn test_valid_python_dev_versions() {
+        assert!(validate_python("1.0.dev1").is_ok());
+        assert!(validate_python("1.0.0.dev1").is_ok());
+        assert!(validate_python("1.0a1.dev1").is_ok());
+        assert!(validate_python("1.0.post1.dev1").is_ok());
     }
 
     #[test]
-    fn test_valid_epoch_versions() {
-        assert!(validate_pep440("1!1.0").is_ok());
-        assert!(validate_pep440("2!1.0.0").is_ok());
+    fn test_valid_python_epoch_versions() {
+        assert!(validate_python("1!1.0").is_ok());
+        assert!(validate_python("2!1.0.0").is_ok());
     }
 
     #[test]
-    fn test_valid_local_versions() {
-        assert!(validate_pep440("1.0+local").is_ok());
-        assert!(validate_pep440("1.0+local.version").is_ok());
-        assert!(validate_pep440("1.0+abc123").is_ok());
-        assert!(validate_pep440("1.0a1+local").is_ok());
+    fn test_valid_python_local_versions() {
+        assert!(validate_python("1.0+local").is_ok());
+        assert!(validate_python("1.0+local.version").is_ok());
+        assert!(validate_python("1.0+abc123").is_ok());
+        assert!(validate_python("1.0a1+local").is_ok());
     }
 
     #[test]
-    fn test_invalid_versions() {
-        assert!(validate_pep440("").is_err());
-        assert!(validate_pep440("a.b.c").is_err());
-        assert!(validate_pep440("1.0+").is_err());
-        assert!(validate_pep440("1.0.").is_err());
-        assert!(validate_pep440(".1.0").is_err());
-        assert!(validate_pep440("1..0").is_err());
+    fn test_invalid_python_versions() {
+        assert!(validate_python("").is_err());
+        assert!(validate_python("a.b.c").is_err());
+        assert!(validate_python("1.0+").is_err());
+        assert!(validate_python("1.0.").is_err());
+        assert!(validate_python(".1.0").is_err());
+        assert!(validate_python("1..0").is_err());
+    }
+
+    #[test]
+    fn test_valid_javascript_versions() {
+        assert!(validate_javascript("1.0.0").is_ok());
+        assert!(validate_javascript("1.2.3").is_ok());
+        assert!(validate_javascript("0.0.1").is_ok());
+        assert!(validate_javascript("10.20.30").is_ok());
+    }
+
+    #[test]
+    fn test_valid_javascript_prerelease_versions() {
+        assert!(validate_javascript("1.0.0-alpha.1").is_ok());
+        assert!(validate_javascript("1.0.0-beta.2").is_ok());
+        assert!(validate_javascript("1.0.0-rc.1").is_ok());
+        assert!(validate_javascript("1.0.0-0").is_ok());
+        assert!(validate_javascript("1.0.0-alpha").is_ok());
+    }
+
+    #[test]
+    fn test_valid_javascript_build_versions() {
+        assert!(validate_javascript("1.0.0+build").is_ok());
+        assert!(validate_javascript("1.0.0+build.123").is_ok());
+        assert!(validate_javascript("1.0.0-alpha.1+build").is_ok());
+    }
+
+    #[test]
+    fn test_invalid_javascript_versions() {
+        assert!(validate_javascript("").is_err());
+        assert!(validate_javascript("1.0").is_err()); // Must have 3 parts
+        assert!(validate_javascript("1").is_err());
+        assert!(validate_javascript("1.0.0-").is_err());
+        assert!(validate_javascript("1.0.0+").is_err());
     }
 }

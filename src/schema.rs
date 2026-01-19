@@ -29,6 +29,7 @@ pub enum FileKind {
     Any,
     Simple,
     Python,
+    Javascript,
 }
 
 #[derive(Debug, Deserialize, Serialize, Default, Clone, Copy, PartialEq, Eq)]

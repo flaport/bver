@@ -48,7 +48,7 @@ pub fn bump_version(config: &Config, target: &str) -> Result<(), String> {
 }
 
 fn is_version_string(s: &str) -> bool {
-    !matches!(s, "major" | "minor" | "patch")
+    !matches!(s, "major" | "minor" | "patch" | "alpha" | "beta" | "rc" | "post" | "dev" | "release")
 }
 
 fn get_file_version(
@@ -102,31 +102,205 @@ fn get_file_version(
 }
 
 fn compute_new_version(current: &str, component: &str) -> Result<String, String> {
-    let parts: Vec<&str> = current.split('.').collect();
-    if parts.len() != 3 {
-        return Err(format!(
-            "Invalid version format: {current}. Expected semver (major.minor.patch)"
-        ));
+    let parsed = parse_version(current)?;
+
+    match component {
+        "major" => Ok(format!("{}.0.0", parsed.major + 1)),
+        "minor" => Ok(format!("{}.{}.0", parsed.major, parsed.minor + 1)),
+        "patch" => {
+            // If we have a prerelease, just drop it (1.0.0a1 -> 1.0.0)
+            if parsed.prerelease.is_some() || parsed.post.is_some() || parsed.dev.is_some() {
+                Ok(format!("{}.{}.{}", parsed.major, parsed.minor, parsed.patch))
+            } else {
+                Ok(format!("{}.{}.{}", parsed.major, parsed.minor, parsed.patch + 1))
+            }
+        }
+        "release" => {
+            // Drop all prerelease/post/dev suffixes
+            Ok(format!("{}.{}.{}", parsed.major, parsed.minor, parsed.patch))
+        }
+        "alpha" => {
+            let num = match &parsed.prerelease {
+                Some((kind, n)) if kind == "alpha" => n + 1,
+                _ => 1,
+            };
+            Ok(format!("{}.{}.{}a{}", parsed.major, parsed.minor, parsed.patch, num))
+        }
+        "beta" => {
+            let num = match &parsed.prerelease {
+                Some((kind, n)) if kind == "beta" => n + 1,
+                _ => 1,
+            };
+            Ok(format!("{}.{}.{}b{}", parsed.major, parsed.minor, parsed.patch, num))
+        }
+        "rc" => {
+            let num = match &parsed.prerelease {
+                Some((kind, n)) if kind == "rc" => n + 1,
+                _ => 1,
+            };
+            Ok(format!("{}.{}.{}rc{}", parsed.major, parsed.minor, parsed.patch, num))
+        }
+        "post" => {
+            let num = parsed.post.map(|n| n + 1).unwrap_or(1);
+            let base = format!("{}.{}.{}", parsed.major, parsed.minor, parsed.patch);
+            let pre = match &parsed.prerelease {
+                Some((kind, n)) => format!("{}{}", prerelease_prefix(kind), n),
+                None => String::new(),
+            };
+            Ok(format!("{}{}.post{}", base, pre, num))
+        }
+        "dev" => {
+            let num = parsed.dev.map(|n| n + 1).unwrap_or(1);
+            let base = format!("{}.{}.{}", parsed.major, parsed.minor, parsed.patch);
+            let pre = match &parsed.prerelease {
+                Some((kind, n)) => format!("{}{}", prerelease_prefix(kind), n),
+                None => String::new(),
+            };
+            let post = parsed.post.map(|n| format!(".post{}", n)).unwrap_or_default();
+            Ok(format!("{}{}{}.dev{}", base, pre, post, num))
+        }
+        _ => Err(format!(
+            "Invalid component: {component}. Use major, minor, patch, release, alpha, beta, rc, post, or dev"
+        )),
     }
+}
 
-    let major: u32 = parts[0]
-        .parse()
-        .map_err(|_| format!("Invalid major version: {}", parts[0]))?;
-    let minor: u32 = parts[1]
-        .parse()
-        .map_err(|_| format!("Invalid minor version: {}", parts[1]))?;
-    let patch: u32 = parts[2]
-        .parse()
-        .map_err(|_| format!("Invalid patch version: {}", parts[2]))?;
+fn prerelease_prefix(kind: &str) -> &'static str {
+    match kind {
+        "alpha" => "a",
+        "beta" => "b",
+        "rc" => "rc",
+        _ => "",
+    }
+}
 
-    let (major, minor, patch) = match component {
-        "major" => (major + 1, 0, 0),
-        "minor" => (major, minor + 1, 0),
-        "patch" => (major, minor, patch + 1),
-        _ => return Err(format!("Invalid component: {component}. Use major, minor, or patch")),
+#[derive(Debug, Default)]
+struct ParsedVersion {
+    major: u32,
+    minor: u32,
+    patch: u32,
+    prerelease: Option<(String, u32)>, // (kind, number) e.g., ("alpha", 1)
+    post: Option<u32>,
+    dev: Option<u32>,
+}
+
+fn parse_version(version: &str) -> Result<ParsedVersion, String> {
+    let version = version.to_lowercase();
+
+    // Remove epoch if present
+    let version = if let Some(pos) = version.find('!') {
+        &version[pos + 1..]
+    } else {
+        version.as_str()
     };
 
-    Ok(format!("{major}.{minor}.{patch}"))
+    // Remove local version if present
+    let version = if let Some(pos) = version.find('+') {
+        &version[..pos]
+    } else {
+        version
+    };
+
+    let mut parsed = ParsedVersion::default();
+
+    // Find dev suffix
+    let (version, dev) = if let Some(pos) = version.find(".dev") {
+        let dev_part = &version[pos + 4..];
+        let dev_num: u32 = dev_part.parse().unwrap_or(0);
+        (&version[..pos], Some(dev_num))
+    } else if let Some(pos) = version.find("dev") {
+        let dev_part = &version[pos + 3..];
+        let dev_num: u32 = dev_part.parse().unwrap_or(0);
+        (&version[..pos], Some(dev_num))
+    } else {
+        (version, None)
+    };
+    parsed.dev = dev;
+
+    // Find post suffix
+    let (version, post) = if let Some(pos) = version.find(".post") {
+        let post_part = &version[pos + 5..];
+        let post_num: u32 = post_part.parse().unwrap_or(0);
+        (&version[..pos], Some(post_num))
+    } else if let Some(pos) = version.find("post") {
+        let post_part = &version[pos + 4..];
+        let post_num: u32 = post_part.parse().unwrap_or(0);
+        (&version[..pos], Some(post_num))
+    } else {
+        (version, None)
+    };
+    parsed.post = post;
+
+    // Find prerelease suffix (alpha, beta, rc, a, b, c)
+    let prerelease_markers = [
+        ("alpha", "alpha"),
+        ("beta", "beta"),
+        ("preview", "rc"),
+        ("rc", "rc"),
+        ("a", "alpha"),
+        ("b", "beta"),
+        ("c", "rc"),
+    ];
+
+    let mut release = version;
+    for (marker, kind) in prerelease_markers {
+        if let Some(pos) = version.find(marker) {
+            let before = &version[..pos];
+            // Make sure it's at a valid position (after a digit or dot)
+            if before.is_empty() || (!before.ends_with('.') && !before.chars().last().unwrap().is_ascii_digit()) {
+                continue;
+            }
+            let after = &version[pos + marker.len()..];
+            let num: u32 = after
+                .chars()
+                .take_while(|c| c.is_ascii_digit())
+                .collect::<String>()
+                .parse()
+                .unwrap_or(0);
+            parsed.prerelease = Some((kind.to_string(), num));
+            release = before;
+            break;
+        }
+    }
+
+    // Also handle JS-style prerelease (1.0.0-alpha.1)
+    let release = if let Some(pos) = release.find('-') {
+        let pre_part = &release[pos + 1..];
+        if pre_part.starts_with("alpha") {
+            let num_part = pre_part.strip_prefix("alpha").unwrap_or("").trim_start_matches('.');
+            let num: u32 = num_part.parse().unwrap_or(0);
+            parsed.prerelease = Some(("alpha".to_string(), num));
+        } else if pre_part.starts_with("beta") {
+            let num_part = pre_part.strip_prefix("beta").unwrap_or("").trim_start_matches('.');
+            let num: u32 = num_part.parse().unwrap_or(0);
+            parsed.prerelease = Some(("beta".to_string(), num));
+        } else if pre_part.starts_with("rc") {
+            let num_part = pre_part.strip_prefix("rc").unwrap_or("").trim_start_matches('.');
+            let num: u32 = num_part.parse().unwrap_or(0);
+            parsed.prerelease = Some(("rc".to_string(), num));
+        }
+        &release[..pos]
+    } else {
+        release
+    };
+
+    // Parse major.minor.patch
+    let parts: Vec<&str> = release.split('.').collect();
+    if parts.is_empty() {
+        return Err(format!("Invalid version format: {version}"));
+    }
+
+    parsed.major = parts[0]
+        .parse()
+        .map_err(|_| format!("Invalid major version: {}", parts[0]))?;
+    parsed.minor = parts.get(1).unwrap_or(&"0")
+        .parse()
+        .map_err(|_| format!("Invalid minor version: {}", parts.get(1).unwrap_or(&"0")))?;
+    parsed.patch = parts.get(2).unwrap_or(&"0")
+        .parse()
+        .map_err(|_| format!("Invalid patch version: {}", parts.get(2).unwrap_or(&"0")))?;
+
+    Ok(parsed)
 }
 
 fn process_file(
@@ -249,4 +423,105 @@ fn apply_changes(
 
     println!("Updated: {}", path.display());
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_bump_major() {
+        assert_eq!(compute_new_version("1.2.3", "major").unwrap(), "2.0.0");
+        assert_eq!(compute_new_version("0.1.0", "major").unwrap(), "1.0.0");
+        assert_eq!(compute_new_version("1.2.3a1", "major").unwrap(), "2.0.0");
+    }
+
+    #[test]
+    fn test_bump_minor() {
+        assert_eq!(compute_new_version("1.2.3", "minor").unwrap(), "1.3.0");
+        assert_eq!(compute_new_version("0.1.0", "minor").unwrap(), "0.2.0");
+        assert_eq!(compute_new_version("1.2.3a1", "minor").unwrap(), "1.3.0");
+    }
+
+    #[test]
+    fn test_bump_patch() {
+        assert_eq!(compute_new_version("1.2.3", "patch").unwrap(), "1.2.4");
+        assert_eq!(compute_new_version("0.1.0", "patch").unwrap(), "0.1.1");
+        // With prerelease, patch just drops the prerelease
+        assert_eq!(compute_new_version("1.2.3a1", "patch").unwrap(), "1.2.3");
+        assert_eq!(compute_new_version("1.2.3.post1", "patch").unwrap(), "1.2.3");
+    }
+
+    #[test]
+    fn test_bump_release() {
+        assert_eq!(compute_new_version("1.2.3a1", "release").unwrap(), "1.2.3");
+        assert_eq!(compute_new_version("1.2.3b2", "release").unwrap(), "1.2.3");
+        assert_eq!(compute_new_version("1.2.3rc1", "release").unwrap(), "1.2.3");
+        assert_eq!(compute_new_version("1.2.3.post1", "release").unwrap(), "1.2.3");
+        assert_eq!(compute_new_version("1.2.3.dev1", "release").unwrap(), "1.2.3");
+        assert_eq!(compute_new_version("1.2.3", "release").unwrap(), "1.2.3");
+    }
+
+    #[test]
+    fn test_bump_alpha() {
+        assert_eq!(compute_new_version("1.2.3", "alpha").unwrap(), "1.2.3a1");
+        assert_eq!(compute_new_version("1.2.3a1", "alpha").unwrap(), "1.2.3a2");
+        assert_eq!(compute_new_version("1.2.3a5", "alpha").unwrap(), "1.2.3a6");
+        // Switching from beta/rc to alpha resets to 1
+        assert_eq!(compute_new_version("1.2.3b1", "alpha").unwrap(), "1.2.3a1");
+    }
+
+    #[test]
+    fn test_bump_beta() {
+        assert_eq!(compute_new_version("1.2.3", "beta").unwrap(), "1.2.3b1");
+        assert_eq!(compute_new_version("1.2.3b1", "beta").unwrap(), "1.2.3b2");
+        assert_eq!(compute_new_version("1.2.3a1", "beta").unwrap(), "1.2.3b1");
+    }
+
+    #[test]
+    fn test_bump_rc() {
+        assert_eq!(compute_new_version("1.2.3", "rc").unwrap(), "1.2.3rc1");
+        assert_eq!(compute_new_version("1.2.3rc1", "rc").unwrap(), "1.2.3rc2");
+        assert_eq!(compute_new_version("1.2.3b1", "rc").unwrap(), "1.2.3rc1");
+    }
+
+    #[test]
+    fn test_bump_post() {
+        assert_eq!(compute_new_version("1.2.3", "post").unwrap(), "1.2.3.post1");
+        assert_eq!(compute_new_version("1.2.3.post1", "post").unwrap(), "1.2.3.post2");
+        assert_eq!(compute_new_version("1.2.3a1", "post").unwrap(), "1.2.3a1.post1");
+    }
+
+    #[test]
+    fn test_bump_dev() {
+        assert_eq!(compute_new_version("1.2.3", "dev").unwrap(), "1.2.3.dev1");
+        assert_eq!(compute_new_version("1.2.3.dev1", "dev").unwrap(), "1.2.3.dev2");
+        assert_eq!(compute_new_version("1.2.3a1", "dev").unwrap(), "1.2.3a1.dev1");
+        assert_eq!(compute_new_version("1.2.3.post1", "dev").unwrap(), "1.2.3.post1.dev1");
+    }
+
+    #[test]
+    fn test_bump_js_style_prerelease() {
+        // JS style: 1.0.0-alpha.1
+        assert_eq!(compute_new_version("1.2.3-alpha.1", "alpha").unwrap(), "1.2.3a2");
+        assert_eq!(compute_new_version("1.2.3-beta.1", "beta").unwrap(), "1.2.3b2");
+        assert_eq!(compute_new_version("1.2.3-rc.1", "rc").unwrap(), "1.2.3rc2");
+    }
+
+    #[test]
+    fn test_parse_version() {
+        let p = parse_version("1.2.3").unwrap();
+        assert_eq!((p.major, p.minor, p.patch), (1, 2, 3));
+        assert!(p.prerelease.is_none());
+
+        let p = parse_version("1.2.3a1").unwrap();
+        assert_eq!((p.major, p.minor, p.patch), (1, 2, 3));
+        assert_eq!(p.prerelease, Some(("alpha".to_string(), 1)));
+
+        let p = parse_version("1.2.3.post1").unwrap();
+        assert_eq!(p.post, Some(1));
+
+        let p = parse_version("1.2.3.dev1").unwrap();
+        assert_eq!(p.dev, Some(1));
+    }
 }

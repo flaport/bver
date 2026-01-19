@@ -7,6 +7,7 @@ pub fn cast_version(version: &str, target_kind: FileKind) -> Result<String, Stri
         FileKind::Any => Ok(version.to_string()),
         FileKind::Simple => cast_to_simple(version),
         FileKind::Python => cast_to_python(version),
+        FileKind::Javascript => cast_to_javascript(version),
     }
 }
 
@@ -67,6 +68,89 @@ fn cast_to_python(version: &str) -> Result<String, String> {
     // Already a valid Python version (assume it's fine)
     // The validator will catch any issues
     Ok(version.to_string())
+}
+
+/// Cast any version to JavaScript/npm format.
+/// Converts Python-style prereleases to JS-style (e.g., 1.2.3a1 -> 1.2.3-alpha.1)
+/// Strips post and dev releases as they're not supported in npm.
+fn cast_to_javascript(version: &str) -> Result<String, String> {
+    let version = version.to_lowercase();
+
+    // Remove epoch (e.g., "1!1.0" -> "1.0")
+    let version = if let Some(pos) = version.find('!') {
+        &version[pos + 1..]
+    } else {
+        version.as_str()
+    };
+
+    // Remove local version (e.g., "1.0+local" -> "1.0")
+    let version = if let Some(pos) = version.find('+') {
+        &version[..pos]
+    } else {
+        version
+    };
+
+    // Find where the release version ends
+    let release_end = find_release_end(version);
+    let release = &version[..release_end];
+    let suffix = &version[release_end..];
+
+    // Parse the release parts and ensure we have exactly 3
+    let parts: Vec<&str> = release.split('.').collect();
+    if parts.is_empty() {
+        return Err(format!("Cannot cast '{version}' to javascript version: no version parts found"));
+    }
+
+    for part in &parts {
+        if part.parse::<u32>().is_err() {
+            return Err(format!("Cannot cast '{version}' to javascript version: invalid part '{part}'"));
+        }
+    }
+
+    let major = parts.first().unwrap_or(&"0");
+    let minor = parts.get(1).unwrap_or(&"0");
+    let patch = parts.get(2).unwrap_or(&"0");
+    let base = format!("{major}.{minor}.{patch}");
+
+    // Convert Python prerelease to JS format
+    if suffix.is_empty() {
+        return Ok(base);
+    }
+
+    // Strip .post and .dev as they're not supported
+    let suffix = suffix
+        .split(".post")
+        .next()
+        .unwrap_or(suffix)
+        .split(".dev")
+        .next()
+        .unwrap_or(suffix);
+
+    if suffix.is_empty() {
+        return Ok(base);
+    }
+
+    // Convert a1 -> -alpha.1, b1 -> -beta.1, rc1 -> -rc.1
+    let js_prerelease = if let Some(rest) = suffix.strip_prefix("alpha") {
+        format!("-alpha.{}", rest.trim_start_matches(|c: char| !c.is_ascii_digit()))
+    } else if let Some(rest) = suffix.strip_prefix('a') {
+        format!("-alpha.{}", rest.trim_start_matches(|c: char| !c.is_ascii_digit()))
+    } else if let Some(rest) = suffix.strip_prefix("beta") {
+        format!("-beta.{}", rest.trim_start_matches(|c: char| !c.is_ascii_digit()))
+    } else if let Some(rest) = suffix.strip_prefix('b') {
+        format!("-beta.{}", rest.trim_start_matches(|c: char| !c.is_ascii_digit()))
+    } else if let Some(rest) = suffix.strip_prefix("rc") {
+        format!("-rc.{}", rest.trim_start_matches(|c: char| !c.is_ascii_digit()))
+    } else if let Some(rest) = suffix.strip_prefix('c') {
+        format!("-rc.{}", rest.trim_start_matches(|c: char| !c.is_ascii_digit()))
+    } else if let Some(rest) = suffix.strip_prefix("preview") {
+        format!("-rc.{}", rest.trim_start_matches(|c: char| !c.is_ascii_digit()))
+    } else {
+        // Unknown suffix, strip it
+        return Ok(base);
+    };
+
+    Ok(format!("{base}{js_prerelease}"))
 }
 
 /// Find the end position of the release version (before pre/post/dev markers).
