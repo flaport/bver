@@ -51,12 +51,12 @@ pub fn find_cargo_toml() -> Option<PathBuf> {
     }
 }
 
-pub fn find_vrsn_toml() -> Option<PathBuf> {
+pub fn find_bver_toml() -> Option<PathBuf> {
     let mut current = std::env::current_dir().ok()?;
     loop {
-        let vrsn_toml = current.join("vrsn.toml");
-        if vrsn_toml.exists() {
-            return Some(vrsn_toml);
+        let bver_toml = current.join("bver.toml");
+        if bver_toml.exists() {
+            return Some(bver_toml);
         }
         if !current.pop() {
             return None;
@@ -66,7 +66,7 @@ pub fn find_vrsn_toml() -> Option<PathBuf> {
 
 pub fn find_project_root() -> Option<PathBuf> {
     find_repo_root()
-        .or_else(|| find_vrsn_toml().and_then(|p| p.parent().map(PathBuf::from)))
+        .or_else(|| find_bver_toml().and_then(|p| p.parent().map(PathBuf::from)))
         .or_else(|| find_pyproject_toml().and_then(|p| p.parent().map(PathBuf::from)))
         .or_else(|| find_package_json().and_then(|p| p.parent().map(PathBuf::from)))
         .or_else(|| find_cargo_toml().and_then(|p| p.parent().map(PathBuf::from)))
