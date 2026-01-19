@@ -1,4 +1,5 @@
 mod bump;
+mod cast;
 mod finders;
 mod loader;
 mod schema;

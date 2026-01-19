@@ -2,8 +2,9 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
 
+use crate::cast::cast_version;
 use crate::finders::find_project_root;
-use crate::schema::{Config, FileKind};
+use crate::schema::{Config, FileKind, OnInvalidVersion};
 use crate::version::validate_version;
 
 const DEFAULT_CONTEXT_LINES: usize = 3;
@@ -36,18 +37,10 @@ pub fn bump_version(config: &Config, target: &str) -> Result<(), String> {
 
         let kind = file_config.kind.unwrap_or(default_kind);
 
-        // Validate the new version against the file kind
-        validate_version(&new_version, kind).map_err(|e| {
-            format!(
-                "Invalid version '{}' for file '{}' (kind: {:?}): {}",
-                new_version,
-                file_config.src.display(),
-                kind,
-                e
-            )
-        })?;
+        // Get the version to use for this file (possibly casted)
+        let file_version = get_file_version(&new_version, kind, config.on_invalid_version, &file_config.src)?;
 
-        process_file(&file_path, current_version, &new_version, kind, context_lines)?;
+        process_file(&file_path, current_version, &file_version, kind, context_lines)?;
     }
 
     Ok(())
@@ -55,6 +48,56 @@ pub fn bump_version(config: &Config, target: &str) -> Result<(), String> {
 
 fn is_version_string(s: &str) -> bool {
     !matches!(s, "major" | "minor" | "patch")
+}
+
+fn get_file_version(
+    version: &str,
+    kind: FileKind,
+    on_invalid: OnInvalidVersion,
+    src: &Path,
+) -> Result<String, String> {
+    // First, check if the version is already valid for this kind
+    if validate_version(version, kind).is_ok() {
+        return Ok(version.to_string());
+    }
+
+    // Version is invalid for this kind
+    match on_invalid {
+        OnInvalidVersion::Error => {
+            let err = validate_version(version, kind).unwrap_err();
+            Err(format!(
+                "Invalid version '{}' for file '{}' (kind: {:?}): {}",
+                version,
+                src.display(),
+                kind,
+                err
+            ))
+        }
+        OnInvalidVersion::Cast => {
+            let casted = cast_version(version, kind).map_err(|e| {
+                format!(
+                    "Cannot cast version '{}' for file '{}' (kind: {:?}): {}",
+                    version,
+                    src.display(),
+                    kind,
+                    e
+                )
+            })?;
+
+            // Validate the casted version
+            validate_version(&casted, kind).map_err(|e| {
+                format!(
+                    "Casted version '{}' is still invalid for file '{}' (kind: {:?}): {}",
+                    casted,
+                    src.display(),
+                    kind,
+                    e
+                )
+            })?;
+
+            Ok(casted)
+        }
+    }
 }
 
 fn compute_new_version(current: &str, component: &str) -> Result<String, String> {

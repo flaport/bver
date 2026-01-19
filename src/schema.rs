@@ -9,6 +9,8 @@ pub struct Config {
     pub context_lines: Option<usize>,
     #[serde(default)]
     pub default_kind: FileKind,
+    #[serde(default)]
+    pub on_invalid_version: OnInvalidVersion,
     #[serde(default, rename = "file")]
     pub files: Vec<FileConfig>,
 }
@@ -27,4 +29,12 @@ pub enum FileKind {
     Any,
     Simple,
     Python,
+}
+
+#[derive(Debug, Deserialize, Serialize, Default, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum OnInvalidVersion {
+    #[default]
+    Error,
+    Cast,
 }
