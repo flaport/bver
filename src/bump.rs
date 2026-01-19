@@ -1,6 +1,7 @@
+use std::collections::HashMap;
 use std::fs;
 use std::io::{self, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::cast::cast_version;
 use crate::finders::find_project_root;
@@ -9,6 +10,13 @@ use crate::schema::{Config, FileKind, OnInvalidVersion};
 use crate::version::validate_version;
 
 const DEFAULT_CONTEXT_LINES: usize = 3;
+
+/// Pending changes for a file: list of line indices to update
+struct PendingChanges {
+    old_version: String,
+    new_version: String,
+    accepted_lines: Vec<usize>,
+}
 
 /// Format a path relative to project root, bold, with folder and filename in different colors
 fn pretty_path(path: &Path) -> String {
@@ -48,6 +56,9 @@ pub fn bump_version(config: &Config, target: &str, force: bool) -> Result<(), St
 
     let default_kind = config.default_kind;
 
+    // Collect all pending changes first
+    let mut all_changes: HashMap<PathBuf, PendingChanges> = HashMap::new();
+
     for file_config in &config.files {
         let file_path = project_root.join(&file_config.src);
         if !file_path.exists() {
@@ -61,7 +72,18 @@ pub fn bump_version(config: &Config, target: &str, force: bool) -> Result<(), St
         let old_file_version = get_file_version(current_version, kind, config.on_invalid_version, &file_config.src)?;
         let new_file_version = get_file_version(&new_version, kind, config.on_invalid_version, &file_config.src)?;
 
-        process_file(&file_path, &old_file_version, &new_file_version, kind, context_lines)?;
+        if let Some(changes) = collect_file_changes(&file_path, &old_file_version, &new_file_version, context_lines)? {
+            all_changes.insert(file_path, changes);
+        }
+    }
+
+    // Apply all changes
+    if !all_changes.is_empty() {
+        println!();
+        println!("Applying changes...");
+        for (path, changes) in &all_changes {
+            apply_changes(path, &changes.accepted_lines, &changes.old_version, &changes.new_version)?;
+        }
     }
 
     // Run pre-commit hooks if configured
@@ -329,13 +351,12 @@ fn parse_version(version: &str) -> Result<ParsedVersion, String> {
     Ok(parsed)
 }
 
-fn process_file(
+fn collect_file_changes(
     path: &Path,
     old_version: &str,
     new_version: &str,
-    _kind: FileKind,
     context_lines: usize,
-) -> Result<(), String> {
+) -> Result<Option<PendingChanges>, String> {
     let content = fs::read_to_string(path).map_err(|e| format!("Failed to read {}: {e}", path.display()))?;
     let lines: Vec<&str> = content.lines().collect();
 
@@ -359,21 +380,25 @@ fn process_file(
     let mut accepted_lines: Vec<usize> = Vec::new();
 
     for &line_idx in &occurrences {
-        if show_diff_and_prompt(path, &lines, line_idx, old_version, new_version, context_lines)? {
+        if show_diff_and_prompt(&lines, line_idx, old_version, new_version, context_lines)? {
             accepted_lines.push(line_idx);
         }
     }
 
-    if !accepted_lines.is_empty() {
-        apply_changes(path, &lines, &accepted_lines, old_version, new_version)?;
-    }
-
     println!();
-    Ok(())
+
+    if accepted_lines.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(PendingChanges {
+            old_version: old_version.to_string(),
+            new_version: new_version.to_string(),
+            accepted_lines,
+        }))
+    }
 }
 
 fn show_diff_and_prompt(
-    _path: &Path,
     lines: &[&str],
     line_idx: usize,
     old_version: &str,
@@ -419,11 +444,13 @@ fn show_diff_and_prompt(
 
 fn apply_changes(
     path: &Path,
-    lines: &[&str],
     accepted_lines: &[usize],
     old_version: &str,
     new_version: &str,
 ) -> Result<(), String> {
+    let original = fs::read_to_string(path).map_err(|e| format!("Failed to read {}: {e}", pretty_path(path)))?;
+    let lines: Vec<&str> = original.lines().collect();
+
     let new_content: Vec<String> = lines
         .iter()
         .enumerate()
@@ -439,7 +466,6 @@ fn apply_changes(
     let new_content = new_content.join("\n");
 
     // Preserve trailing newline if original had one
-    let original = fs::read_to_string(path).map_err(|e| e.to_string())?;
     let new_content = if original.ends_with('\n') {
         new_content + "\n"
     } else {
