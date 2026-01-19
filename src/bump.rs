@@ -37,10 +37,11 @@ pub fn bump_version(config: &Config, target: &str) -> Result<(), String> {
 
         let kind = file_config.kind.unwrap_or(default_kind);
 
-        // Get the version to use for this file (possibly casted)
-        let file_version = get_file_version(&new_version, kind, config.on_invalid_version, &file_config.src)?;
+        // Get the versions to use for this file (possibly casted)
+        let old_file_version = get_file_version(current_version, kind, config.on_invalid_version, &file_config.src)?;
+        let new_file_version = get_file_version(&new_version, kind, config.on_invalid_version, &file_config.src)?;
 
-        process_file(&file_path, current_version, &file_version, kind, context_lines)?;
+        process_file(&file_path, &old_file_version, &new_file_version, kind, context_lines)?;
     }
 
     Ok(())
