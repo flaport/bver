@@ -1,7 +1,9 @@
+mod bump;
 mod finders;
 mod loader;
 mod schema;
 
+use bump::bump_version;
 use clap::{Parser, Subcommand};
 use loader::load_config;
 
@@ -53,7 +55,13 @@ fn main() {
             }
         }
         Commands::Bump { component } => {
-            println!("Bump {component} (not yet implemented)");
+            if let Some(config) = config {
+                if let Err(e) = bump_version(&config, &component) {
+                    eprintln!("Error: {e}");
+                }
+            } else {
+                eprintln!("No config found");
+            }
         }
     }
 }
