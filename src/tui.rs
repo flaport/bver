@@ -138,18 +138,24 @@ fn draw(frame: &mut Frame, changes: &[ProposedChange], state: &mut ListState) {
             ]));
         }
 
-        // Old line (red)
         let line_num = change.line_idx + 1;
-        preview_lines.push(Line::from(vec![
-            Span::styled(format!("- {:4} │ ", line_num), Style::default().fg(Color::Red)),
-            Span::styled(&change.old_line, Style::default().fg(Color::Red)),
-        ]));
-
-        // New line (green)
-        preview_lines.push(Line::from(vec![
-            Span::styled(format!("+ {:4} │ ", line_num), Style::default().fg(Color::Green)),
-            Span::styled(&change.new_line, Style::default().fg(Color::Green)),
-        ]));
+        if change.selected {
+            // Show diff: old line (red) and new line (green)
+            preview_lines.push(Line::from(vec![
+                Span::styled(format!("- {:4} │ ", line_num), Style::default().fg(Color::Red)),
+                Span::styled(&change.old_line, Style::default().fg(Color::Red)),
+            ]));
+            preview_lines.push(Line::from(vec![
+                Span::styled(format!("+ {:4} │ ", line_num), Style::default().fg(Color::Green)),
+                Span::styled(&change.new_line, Style::default().fg(Color::Green)),
+            ]));
+        } else {
+            // No change: show original line normally
+            preview_lines.push(Line::from(vec![
+                Span::styled(format!("  {:4} │ ", line_num), Style::default().fg(Color::DarkGray)),
+                Span::raw(&change.old_line),
+            ]));
+        }
 
         // Context after
         for (offset, line) in change.context_after.iter().enumerate() {
