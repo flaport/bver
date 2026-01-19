@@ -1,4 +1,6 @@
 mod finders;
+mod loader;
+mod schema;
 
 use finders::find_project_root;
 
