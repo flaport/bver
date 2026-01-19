@@ -29,7 +29,7 @@ pub enum FileKind {
     Any,
     Simple,
     Python,
-    Javascript,
+    Semver,
 }
 
 #[derive(Debug, Deserialize, Serialize, Default, Clone, Copy, PartialEq, Eq)]

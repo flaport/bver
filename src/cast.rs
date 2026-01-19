@@ -7,7 +7,7 @@ pub fn cast_version(version: &str, target_kind: FileKind) -> Result<String, Stri
         FileKind::Any => Ok(version.to_string()),
         FileKind::Simple => cast_to_simple(version),
         FileKind::Python => cast_to_python(version),
-        FileKind::Javascript => cast_to_javascript(version),
+        FileKind::Semver => cast_to_semver(version),
     }
 }
 
@@ -70,10 +70,10 @@ fn cast_to_python(version: &str) -> Result<String, String> {
     Ok(version.to_string())
 }
 
-/// Cast any version to JavaScript/npm format.
-/// Converts Python-style prereleases to JS-style (e.g., 1.2.3a1 -> 1.2.3-alpha.1)
-/// Strips post and dev releases as they're not supported in npm.
-fn cast_to_javascript(version: &str) -> Result<String, String> {
+/// Cast any version to semver format (used by npm, Cargo, etc.).
+/// Converts Python-style prereleases to semver-style (e.g., 1.2.3a1 -> 1.2.3-alpha.1)
+/// Strips post and dev releases as they're not supported in semver.
+fn cast_to_semver(version: &str) -> Result<String, String> {
     let version = version.to_lowercase();
 
     // Remove epoch (e.g., "1!1.0" -> "1.0")
@@ -98,12 +98,12 @@ fn cast_to_javascript(version: &str) -> Result<String, String> {
     // Parse the release parts and ensure we have exactly 3
     let parts: Vec<&str> = release.split('.').collect();
     if parts.is_empty() {
-        return Err(format!("Cannot cast '{version}' to javascript version: no version parts found"));
+        return Err(format!("Cannot cast '{version}' to semver: no version parts found"));
     }
 
     for part in &parts {
         if part.parse::<u32>().is_err() {
-            return Err(format!("Cannot cast '{version}' to javascript version: invalid part '{part}'"));
+            return Err(format!("Cannot cast '{version}' to semver: invalid part '{part}'"));
         }
     }
 

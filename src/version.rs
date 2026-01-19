@@ -6,7 +6,7 @@ pub fn validate_version(version: &str, kind: FileKind) -> Result<(), String> {
         FileKind::Any => Ok(()),
         FileKind::Simple => validate_simple(version),
         FileKind::Python => validate_python(version),
-        FileKind::Javascript => validate_javascript(version),
+        FileKind::Semver => validate_semver(version),
     }
 }
 
@@ -158,15 +158,15 @@ fn is_valid_release(release: &str) -> bool {
     })
 }
 
-/// Validate a JavaScript/npm version string
+/// Validate a semver version string (used by npm, Cargo, etc.)
 /// https://semver.org/
 ///
 /// Format: major.minor.patch[-prerelease][+build]
 /// - Prerelease: -alpha.1, -beta.2, -rc.1, etc.
 /// - Build metadata: +build.123 (ignored for precedence)
 ///
-/// Note: post and dev releases are NOT supported in npm
-fn validate_javascript(version: &str) -> Result<(), String> {
+/// Note: post and dev releases are NOT supported in semver
+fn validate_semver(version: &str) -> Result<(), String> {
     if version.is_empty() {
         return Err("Version string cannot be empty".to_string());
     }
@@ -346,35 +346,35 @@ mod tests {
     }
 
     #[test]
-    fn test_valid_javascript_versions() {
-        assert!(validate_javascript("1.0.0").is_ok());
-        assert!(validate_javascript("1.2.3").is_ok());
-        assert!(validate_javascript("0.0.1").is_ok());
-        assert!(validate_javascript("10.20.30").is_ok());
+    fn test_valid_semver_versions() {
+        assert!(validate_semver("1.0.0").is_ok());
+        assert!(validate_semver("1.2.3").is_ok());
+        assert!(validate_semver("0.0.1").is_ok());
+        assert!(validate_semver("10.20.30").is_ok());
     }
 
     #[test]
-    fn test_valid_javascript_prerelease_versions() {
-        assert!(validate_javascript("1.0.0-alpha.1").is_ok());
-        assert!(validate_javascript("1.0.0-beta.2").is_ok());
-        assert!(validate_javascript("1.0.0-rc.1").is_ok());
-        assert!(validate_javascript("1.0.0-0").is_ok());
-        assert!(validate_javascript("1.0.0-alpha").is_ok());
+    fn test_valid_semver_prerelease_versions() {
+        assert!(validate_semver("1.0.0-alpha.1").is_ok());
+        assert!(validate_semver("1.0.0-beta.2").is_ok());
+        assert!(validate_semver("1.0.0-rc.1").is_ok());
+        assert!(validate_semver("1.0.0-0").is_ok());
+        assert!(validate_semver("1.0.0-alpha").is_ok());
     }
 
     #[test]
-    fn test_valid_javascript_build_versions() {
-        assert!(validate_javascript("1.0.0+build").is_ok());
-        assert!(validate_javascript("1.0.0+build.123").is_ok());
-        assert!(validate_javascript("1.0.0-alpha.1+build").is_ok());
+    fn test_valid_semver_build_versions() {
+        assert!(validate_semver("1.0.0+build").is_ok());
+        assert!(validate_semver("1.0.0+build.123").is_ok());
+        assert!(validate_semver("1.0.0-alpha.1+build").is_ok());
     }
 
     #[test]
-    fn test_invalid_javascript_versions() {
-        assert!(validate_javascript("").is_err());
-        assert!(validate_javascript("1.0").is_err()); // Must have 3 parts
-        assert!(validate_javascript("1").is_err());
-        assert!(validate_javascript("1.0.0-").is_err());
-        assert!(validate_javascript("1.0.0+").is_err());
+    fn test_invalid_semver_versions() {
+        assert!(validate_semver("").is_err());
+        assert!(validate_semver("1.0").is_err()); // Must have 3 parts
+        assert!(validate_semver("1").is_err());
+        assert!(validate_semver("1.0.0-").is_err());
+        assert!(validate_semver("1.0.0+").is_err());
     }
 }
