@@ -4,7 +4,7 @@ use std::path::Path;
 
 use crate::cast::cast_version;
 use crate::finders::find_project_root;
-use crate::git::maybe_run_pre_commit;
+use crate::git::{maybe_run_pre_commit, run_git_actions};
 use crate::schema::{Config, FileKind, OnInvalidVersion};
 use crate::version::validate_version;
 
@@ -66,6 +66,9 @@ pub fn bump_version(config: &Config, target: &str) -> Result<(), String> {
 
     // Run pre-commit hooks if configured
     maybe_run_pre_commit(config.run_pre_commit)?;
+
+    // Run git actions if configured
+    run_git_actions(config.git_action, current_version, &new_version)?;
 
     Ok(())
 }

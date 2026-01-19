@@ -13,6 +13,8 @@ pub struct Config {
     pub on_invalid_version: OnInvalidVersion,
     #[serde(default)]
     pub run_pre_commit: RunPreCommit,
+    #[serde(default)]
+    pub git_action: GitAction,
     #[serde(default, rename = "file")]
     pub files: Vec<FileConfig>,
 }
@@ -49,4 +51,14 @@ pub enum RunPreCommit {
     Disabled,
     #[default]
     WhenPresent,
+}
+
+#[derive(Debug, Deserialize, Serialize, Default, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum GitAction {
+    Disabled,
+    Commit,
+    #[default]
+    CommitAndTag,
+    CommitTagAndPush,
 }

@@ -1,7 +1,7 @@
 use std::process::Command;
 
 use crate::finders::find_repo_root;
-use crate::schema::RunPreCommit;
+use crate::schema::{GitAction, RunPreCommit};
 
 /// Check if pre-commit is available (installed and hook exists in .git)
 fn pre_commit_available() -> bool {
@@ -56,4 +56,73 @@ fn run_pre_commit(required: bool) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+/// Run a git command and return the result
+fn git(args: &[&str]) -> Result<(), String> {
+    println!("Running: git {}", args.join(" "));
+
+    let output = Command::new("git")
+        .args(args)
+        .output()
+        .map_err(|e| format!("Failed to run git: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("git {} failed: {}", args[0], stderr.trim()));
+    }
+
+    Ok(())
+}
+
+/// Run git operations based on config setting
+pub fn run_git_actions(
+    action: GitAction,
+    old_version: &str,
+    new_version: &str,
+) -> Result<(), String> {
+    match action {
+        GitAction::Disabled => Ok(()),
+        GitAction::Commit => {
+            git_add_all()?;
+            git_commit(old_version, new_version)?;
+            Ok(())
+        }
+        GitAction::CommitAndTag => {
+            git_add_all()?;
+            git_commit(old_version, new_version)?;
+            git_tag(new_version)?;
+            Ok(())
+        }
+        GitAction::CommitTagAndPush => {
+            git_add_all()?;
+            git_commit(old_version, new_version)?;
+            git_tag(new_version)?;
+            git_push()?;
+            git_push_tag(new_version)?;
+            Ok(())
+        }
+    }
+}
+
+fn git_add_all() -> Result<(), String> {
+    git(&["add", "--all"])
+}
+
+fn git_commit(old_version: &str, new_version: &str) -> Result<(), String> {
+    let msg = format!("Bump version from {} to {}", old_version, new_version);
+    git(&["commit", "-m", &msg])
+}
+
+fn git_tag(version: &str) -> Result<(), String> {
+    let msg = format!("Release {}", version);
+    git(&["tag", "-a", version, "-m", &msg])
+}
+
+fn git_push() -> Result<(), String> {
+    git(&["push"])
+}
+
+fn git_push_tag(version: &str) -> Result<(), String> {
+    git(&["push", "origin", version])
 }
