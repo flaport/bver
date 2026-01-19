@@ -24,9 +24,9 @@ enum Commands {
     Config,
     /// Bump version
     Bump {
-        /// Version component to bump: major, minor, or patch
+        /// Version component (major, minor, patch) or explicit version (e.g. 1.2.3)
         #[arg(default_value = "patch")]
-        component: String,
+        target: String,
     },
 }
 
@@ -54,9 +54,9 @@ fn main() {
                 eprintln!("No config found");
             }
         }
-        Commands::Bump { component } => {
+        Commands::Bump { target } => {
             if let Some(config) = config {
-                if let Err(e) = bump_version(&config, &component) {
+                if let Err(e) = bump_version(&config, &target) {
                     eprintln!("Error: {e}");
                 }
             } else {

@@ -7,13 +7,17 @@ use crate::schema::Config;
 
 const DEFAULT_CONTEXT_LINES: usize = 3;
 
-pub fn bump_version(config: &Config, component: &str) -> Result<(), String> {
+pub fn bump_version(config: &Config, target: &str) -> Result<(), String> {
     let current_version = config
         .current_version
         .as_ref()
         .ok_or("No current_version found in config")?;
 
-    let new_version = compute_new_version(current_version, component)?;
+    let new_version = if is_version_string(target) {
+        target.to_string()
+    } else {
+        compute_new_version(current_version, target)?
+    };
     let context_lines = config.context_lines.unwrap_or(DEFAULT_CONTEXT_LINES);
     let project_root = find_project_root().ok_or("Could not find project root")?;
 
@@ -31,6 +35,11 @@ pub fn bump_version(config: &Config, component: &str) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn is_version_string(s: &str) -> bool {
+    let parts: Vec<&str> = s.split('.').collect();
+    parts.len() == 3 && parts.iter().all(|p| p.parse::<u32>().is_ok())
 }
 
 fn compute_new_version(current: &str, component: &str) -> Result<String, String> {
