@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 #[derive(Debug, Deserialize, Default)]
 pub struct Config {
+    pub current_version: Option<String>,
     #[serde(default, rename = "file")]
     pub files: Vec<FileConfig>,
 }
