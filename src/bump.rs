@@ -9,6 +9,25 @@ use crate::version::validate_version;
 
 const DEFAULT_CONTEXT_LINES: usize = 3;
 
+/// Format a path relative to project root, bold, with folder and filename in different colors
+fn pretty_path(path: &Path) -> String {
+    let rel_path = if let Some(root) = find_project_root() {
+        path.strip_prefix(&root).unwrap_or(path)
+    } else {
+        path
+    };
+
+    let parent = rel_path.parent().map(|p| p.to_string_lossy()).unwrap_or_default();
+    let filename = rel_path.file_name().map(|f| f.to_string_lossy()).unwrap_or_default();
+
+    // Bold + blue for folder, bold + magenta for filename
+    if parent.is_empty() {
+        format!("\x1b[1;35m{}\x1b[0m", filename)
+    } else {
+        format!("\x1b[1;34m{}/\x1b[35m{}\x1b[0m", parent, filename)
+    }
+}
+
 pub fn bump_version(config: &Config, target: &str) -> Result<(), String> {
     let current_version = config
         .current_version
@@ -31,7 +50,7 @@ pub fn bump_version(config: &Config, target: &str) -> Result<(), String> {
     for file_config in &config.files {
         let file_path = project_root.join(&file_config.src);
         if !file_path.exists() {
-            eprintln!("Warning: File not found: {}", file_path.display());
+            eprintln!("Warning: File not found: {}", pretty_path(&file_path));
             continue;
         }
 
@@ -321,11 +340,14 @@ fn process_file(
         .collect();
 
     if occurrences.is_empty() {
-        return Ok(());
+        return Err(format!(
+            "Version '{}' not found in {}",
+            old_version,
+            pretty_path(path)
+        ));
     }
 
-    println!("File: {}", path.display());
-    println!("{}", "=".repeat(60));
+    println!("{}:", pretty_path(path));
 
     let mut accepted_lines: Vec<usize> = Vec::new();
 
@@ -353,8 +375,6 @@ fn show_diff_and_prompt(
 ) -> Result<bool, String> {
     let start = line_idx.saturating_sub(context_lines);
     let end = (line_idx + context_lines + 1).min(lines.len());
-
-    println!();
 
     for i in start..end {
         let line_num = i + 1;
@@ -419,9 +439,9 @@ fn apply_changes(
         new_content
     };
 
-    fs::write(path, new_content).map_err(|e| format!("Failed to write {}: {e}", path.display()))?;
+    fs::write(path, &new_content).map_err(|e| format!("Failed to write {}: {e}", pretty_path(path)))?;
 
-    println!("Updated: {}", path.display());
+    println!("Updated: {}", pretty_path(path));
     Ok(())
 }
 
