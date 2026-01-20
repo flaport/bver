@@ -16,6 +16,20 @@
 
 ## Installation
 
+### macOS / Linux
+
+```bash
+curl -LsSf https://github.com/flaport/bver/releases/latest/download/install.sh | sh
+```
+
+### Windows (PowerShell)
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://github.com/flaport/bver/releases/latest/download/install.ps1 | iex"
+```
+
+### From source (with Cargo)
+
 ```bash
 cargo install bver
 ```
