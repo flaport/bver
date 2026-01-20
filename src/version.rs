@@ -204,10 +204,10 @@ fn validate_semver(version: &str) -> Result<(), String> {
     }
 
     // Validate prerelease if present
-    if let Some(pre) = prerelease {
-        if pre.is_empty() || !is_valid_semver_identifier(pre) {
-            return Err(format!("Invalid prerelease: {pre}"));
-        }
+    if let Some(pre) = prerelease
+        && (pre.is_empty() || !is_valid_semver_identifier(pre))
+    {
+        return Err(format!("Invalid prerelease: {pre}"));
     }
 
     Ok(())

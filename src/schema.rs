@@ -15,6 +15,8 @@ pub struct Config {
     pub run_pre_commit: RunPreCommit,
     #[serde(default)]
     pub git_action: GitAction,
+    #[serde(default)]
+    pub tag_prefix: String,
     #[serde(default, rename = "file")]
     pub files: Vec<FileConfig>,
 }

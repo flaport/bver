@@ -22,3 +22,7 @@ git-action = "commit-tag-and-push"
 [[package.metadata.bver.file]]
 src = "Cargo.toml"
 kind = "semver"
+
+[[package.metadata.bver.file]]
+src = "README.md"
+kind = "semver"

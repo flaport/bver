@@ -80,8 +80,10 @@ pub fn run_git_actions(
     action: GitAction,
     old_version: &str,
     new_version: &str,
+    tag_prefix: &str,
     force: bool,
 ) -> Result<(), String> {
+    let tag_name = format!("{}{}", tag_prefix, new_version);
     match action {
         GitAction::Disabled => Ok(()),
         GitAction::Commit => {
@@ -92,15 +94,15 @@ pub fn run_git_actions(
         GitAction::CommitAndTag => {
             git_add_all()?;
             git_commit(old_version, new_version)?;
-            git_tag(new_version, force)?;
+            git_tag(&tag_name, new_version, force)?;
             Ok(())
         }
         GitAction::CommitTagAndPush => {
             git_add_all()?;
             git_commit(old_version, new_version)?;
-            git_tag(new_version, force)?;
+            git_tag(&tag_name, new_version, force)?;
             git_push(force)?;
-            git_push_tag(new_version, force)?;
+            git_push_tag(&tag_name, force)?;
             Ok(())
         }
     }
@@ -115,12 +117,12 @@ fn git_commit(old_version: &str, new_version: &str) -> Result<(), String> {
     git(&["commit", "-m", &msg])
 }
 
-fn git_tag(version: &str, force: bool) -> Result<(), String> {
+fn git_tag(tag_name: &str, version: &str, force: bool) -> Result<(), String> {
     let msg = format!("Release {}", version);
     if force {
-        git(&["tag", "-a", version, "-m", &msg, "-f"])
+        git(&["tag", "-a", tag_name, "-m", &msg, "-f"])
     } else {
-        git(&["tag", "-a", version, "-m", &msg])
+        git(&["tag", "-a", tag_name, "-m", &msg])
     }
 }
 
@@ -132,10 +134,10 @@ fn git_push(force: bool) -> Result<(), String> {
     }
 }
 
-fn git_push_tag(version: &str, force: bool) -> Result<(), String> {
+fn git_push_tag(tag_name: &str, force: bool) -> Result<(), String> {
     if force {
-        git(&["push", "origin", version, "--force"])
+        git(&["push", "origin", tag_name, "--force"])
     } else {
-        git(&["push", "origin", version])
+        git(&["push", "origin", tag_name])
     }
 }

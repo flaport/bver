@@ -105,13 +105,36 @@ fn draw(frame: &mut Frame, changes: &[ProposedChange], state: &mut ListState) {
         .split(frame.area());
 
     // Changes list
+    let cwd = std::env::current_dir().unwrap_or_default();
     let items: Vec<ListItem> = changes
         .iter()
         .map(|change| {
-            let checkbox = if change.selected { "[x]" } else { "[ ]" };
-            let path = change.path.to_string_lossy();
+            let checkbox = if change.selected { "[x] " } else { "[ ] " };
+            let rel_path = change.path.strip_prefix(&cwd).unwrap_or(&change.path);
+            let parent = rel_path
+                .parent()
+                .map(|p| p.to_string_lossy())
+                .unwrap_or_default();
+            let filename = rel_path
+                .file_name()
+                .map(|f| f.to_string_lossy())
+                .unwrap_or_default();
             let line_num = change.line_idx + 1;
-            ListItem::new(format!("{} {}:{}", checkbox, path, line_num))
+
+            let mut spans = vec![Span::raw(checkbox)];
+            if !parent.is_empty() {
+                spans.push(Span::styled(
+                    format!("{}/", parent),
+                    Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD),
+                ));
+            }
+            spans.push(Span::styled(
+                filename.to_string(),
+                Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD),
+            ));
+            spans.push(Span::raw(format!(":{}", line_num)));
+
+            ListItem::new(Line::from(spans))
         })
         .collect();
 
