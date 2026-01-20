@@ -1,4 +1,4 @@
-# bver 0.0.2
+# bver 0.0.3
 > A bump-version tool for multi-language projects
 
 ![bver-logo](img/bver-small.png)
