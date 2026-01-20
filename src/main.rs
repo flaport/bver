@@ -14,6 +14,7 @@ use loader::load_config;
 #[derive(Parser)]
 #[command(name = "bver")]
 #[command(about = "A version management tool")]
+#[command(version)]
 #[command(arg_required_else_help = true)]
 struct Cli {
     #[command(subcommand)]
