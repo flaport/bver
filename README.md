@@ -78,8 +78,12 @@ current-version = "1.2.3"
 context-lines = 3              # Lines of context in diff preview
 default-kind = "any"           # any | simple | python | semver
 on-invalid-version = "error"   # error | cast
+
+[git]
+action = "commit-and-tag"      # disabled | commit | commit-and-tag | commit-tag-and-push
 run-pre-commit = "when-present" # enabled | disabled | when-present
-git-action = "commit-and-tag"  # disabled | commit | commit-and-tag | commit-tag-and-push
+tag-template = "{new-version}" # Template for git tag name
+commit-template = "Bump version from {current-version} to {new-version}"
 
 [[file]]
 src = "src/version.py"
@@ -94,14 +98,22 @@ src = "test.txt"
 kind = "simple" # strict major.minor.patch format.
 ```
 
+#### Template Variables
+
+The `tag-template` and `commit-template` settings support these variables:
+- `{current-version}` - the version before bumping
+- `{new-version}` - the version after bumping
+
+Example: `tag-template = "v{new-version}"` produces tags like `v1.2.3`.
+
 ### Python projects (`pyproject.toml`)
 
 ```toml
 [project]
 version = "1.2.3"
 
-[tool.bver]
-git-action = "commit-tag-and-push"
+[tool.bver.git]
+action = "commit-tag-and-push"
 
 [[tool.bver.file]]
 src = "src/mypackage/__init__.py"
@@ -114,7 +126,9 @@ kind = "python"
 {
   "version": "1.2.3",
   "bver": {
-    "git-action": "commit-and-tag",
+    "git": {
+      "action": "commit-and-tag"
+    },
     "file": [
       { "src": "src/version.ts", "kind": "semver" }
     ]
@@ -128,8 +142,8 @@ kind = "python"
 [package]
 version = "1.2.3"
 
-[package.metadata.bver]
-git-action = "commit-and-tag"
+[package.metadata.bver.git]
+action = "commit-and-tag"
 
 [[package.metadata.bver.file]]
 src = "src/lib.rs"
