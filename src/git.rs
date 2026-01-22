@@ -2,7 +2,7 @@ use std::fs;
 use std::process::Command;
 
 use crate::finders::find_repo_root;
-use crate::schema::{GitAction, RunPreCommit};
+use crate::schema::{GitAction, GitConfig, RunPreCommit};
 
 /// Detected pre-commit tool type
 enum PreCommitTool {
@@ -116,31 +116,39 @@ fn git(args: &[&str]) -> Result<(), String> {
     Ok(())
 }
 
+/// Apply template substitutions for version strings
+fn apply_template(template: &str, current_version: &str, new_version: &str) -> String {
+    template
+        .replace("{current-version}", current_version)
+        .replace("{new-version}", new_version)
+}
+
 /// Run git operations based on config setting
 pub fn run_git_actions(
-    action: GitAction,
-    old_version: &str,
+    git_config: &GitConfig,
+    current_version: &str,
     new_version: &str,
-    tag_prefix: &str,
     force: bool,
 ) -> Result<(), String> {
-    let tag_name = format!("{}{}", tag_prefix, new_version);
-    match action {
+    let tag_name = apply_template(&git_config.tag_template, current_version, new_version);
+    let commit_msg = apply_template(&git_config.commit_template, current_version, new_version);
+
+    match git_config.action {
         GitAction::Disabled => Ok(()),
         GitAction::Commit => {
             git_add_all()?;
-            git_commit(old_version, new_version)?;
+            git_commit(&commit_msg)?;
             Ok(())
         }
         GitAction::CommitAndTag => {
             git_add_all()?;
-            git_commit(old_version, new_version)?;
+            git_commit(&commit_msg)?;
             git_tag(&tag_name, new_version, force)?;
             Ok(())
         }
         GitAction::CommitTagAndPush => {
             git_add_all()?;
-            git_commit(old_version, new_version)?;
+            git_commit(&commit_msg)?;
             git_tag(&tag_name, new_version, force)?;
             git_push(force)?;
             git_push_tag(&tag_name, force)?;
@@ -153,9 +161,8 @@ fn git_add_all() -> Result<(), String> {
     git(&["add", "--all"])
 }
 
-fn git_commit(old_version: &str, new_version: &str) -> Result<(), String> {
-    let msg = format!("Bump version from {} to {}", old_version, new_version);
-    git(&["commit", "-m", &msg])
+fn git_commit(msg: &str) -> Result<(), String> {
+    git(&["commit", "-m", msg])
 }
 
 fn git_tag(tag_name: &str, version: &str, force: bool) -> Result<(), String> {

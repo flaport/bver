@@ -12,13 +12,30 @@ pub struct Config {
     #[serde(default)]
     pub on_invalid_version: OnInvalidVersion,
     #[serde(default)]
-    pub run_pre_commit: RunPreCommit,
-    #[serde(default)]
-    pub git_action: GitAction,
-    #[serde(default)]
-    pub tag_prefix: String,
+    pub git: GitConfig,
     #[serde(default, rename = "file")]
     pub files: Vec<FileConfig>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct GitConfig {
+    #[serde(default)]
+    pub action: GitAction,
+    #[serde(default)]
+    pub run_pre_commit: RunPreCommit,
+    #[serde(default = "default_tag_template")]
+    pub tag_template: String,
+    #[serde(default = "default_commit_template")]
+    pub commit_template: String,
+}
+
+fn default_tag_template() -> String {
+    "{new-version}".to_string()
+}
+
+fn default_commit_template() -> String {
+    "Bump version from {current-version} to {new-version}".to_string()
 }
 
 #[derive(Debug, Deserialize, Serialize)]

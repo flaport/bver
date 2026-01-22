@@ -92,10 +92,10 @@ pub fn bump_version(config: &Config, target: &str, force: bool) -> Result<(), St
     }
 
     // Run pre-commit hooks if configured
-    maybe_run_pre_commit(config.run_pre_commit)?;
+    maybe_run_pre_commit(config.git.run_pre_commit)?;
 
     // Run git actions if configured
-    run_git_actions(config.git_action, current_version, &new_version, &config.tag_prefix, force)?;
+    run_git_actions(&config.git, current_version, &new_version, force)?;
 
     Ok(())
 }
