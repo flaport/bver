@@ -51,8 +51,7 @@ pub fn bump_version(config: &Config, target: &str, force: bool) -> Result<(), St
     for file_config in &config.files {
         let file_path = project_root.join(&file_config.src);
         if !file_path.exists() {
-            eprintln!("Warning: File not found: {}", pretty_path(&file_path));
-            continue;
+            return Err(format!("File not found: {}", pretty_path(&file_path)));
         }
 
         let kind = file_config.kind.unwrap_or(default_kind);
