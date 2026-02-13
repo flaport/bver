@@ -28,6 +28,13 @@ curl -LsSf https://github.com/flaport/bver/releases/latest/download/install.sh |
 powershell -ExecutionPolicy ByPass -c "irm https://github.com/flaport/bver/releases/latest/download/install.ps1 | iex"
 ```
 
+### With pip / uv
+
+```bash
+uv tool install bver-cli
+# or: pip install bver-cli
+```
+
 ### From source (with Cargo)
 
 ```bash

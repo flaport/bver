@@ -1,0 +1,17 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "bver-cli"
+version = "0.0.5"
+description = "A bump-version tool for multi-language projects"
+requires-python = ">=3.9"
+
+[project.scripts]
+bver = "bver_cli:main"
+
+[tool.maturin]
+features = ["python"]
+module-name = "bver_cli._bver"
+python-source = "python"
