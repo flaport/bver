@@ -2,7 +2,7 @@ use std::fs;
 use std::process::Command;
 
 use crate::finders::find_repo_root;
-use crate::schema::{GitAction, GitConfig, RunPreCommit};
+use crate::schema::{Action, GitConfig, RunPreCommit};
 
 /// Detected pre-commit tool type
 enum PreCommitTool {
@@ -132,29 +132,31 @@ pub fn run_git_actions(
 ) -> Result<(), String> {
     let tag_name = apply_template(&git_config.tag_template, current_version, new_version);
     let commit_msg = apply_template(&git_config.commit_template, current_version, new_version);
+    let branch_name = apply_template(&git_config.branch_template, current_version, new_version);
 
-    match git_config.action {
-        GitAction::Disabled => Ok(()),
-        GitAction::Commit => {
-            git_add_all()?;
-            git_commit(&commit_msg)?;
-            Ok(())
-        }
-        GitAction::CommitAndTag => {
-            git_add_all()?;
-            git_commit(&commit_msg)?;
-            git_tag(&tag_name, new_version, force)?;
-            Ok(())
-        }
-        GitAction::CommitTagAndPush => {
-            git_add_all()?;
-            git_commit(&commit_msg)?;
-            git_tag(&tag_name, new_version, force)?;
-            git_push(force)?;
+    if git_config.has(Action::AddAll) {
+        git_add_all()?;
+    }
+    if git_config.has(Action::Branch) {
+        git_checkout_new_branch(&branch_name)?;
+    }
+    if git_config.has(Action::Commit) {
+        git_commit(&commit_msg)?;
+    }
+    if git_config.has(Action::Tag) {
+        git_tag(&tag_name, new_version, force)?;
+    }
+    if git_config.has(Action::Push) {
+        git_push(force)?;
+        if git_config.has(Action::Tag) {
             git_push_tag(&tag_name, force)?;
-            Ok(())
         }
     }
+    if git_config.has(Action::Pr) {
+        gh_pr_create(&commit_msg)?;
+    }
+
+    Ok(())
 }
 
 fn git_add_all() -> Result<(), String> {
@@ -188,4 +190,24 @@ fn git_push_tag(tag_name: &str, force: bool) -> Result<(), String> {
     } else {
         git(&["push", "origin", tag_name])
     }
+}
+
+fn git_checkout_new_branch(name: &str) -> Result<(), String> {
+    git(&["checkout", "-b", name])
+}
+
+fn gh_pr_create(title: &str) -> Result<(), String> {
+    println!("Running: gh pr create --title {:?} --body \"\"", title);
+
+    let output = Command::new("gh")
+        .args(["pr", "create", "--title", title, "--body", ""])
+        .output()
+        .map_err(|e| format!("Failed to run gh: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("gh pr create failed: {}", stderr.trim()));
+    }
+
+    Ok(())
 }

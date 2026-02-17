@@ -17,17 +17,60 @@ pub struct Config {
     pub files: Vec<FileConfig>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Default)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct GitConfig {
-    #[serde(default)]
-    pub action: GitAction,
+    #[serde(default = "default_actions")]
+    pub actions: Vec<Action>,
     #[serde(default)]
     pub run_pre_commit: RunPreCommit,
     #[serde(default = "default_tag_template")]
     pub tag_template: String,
     #[serde(default = "default_commit_template")]
     pub commit_template: String,
+    #[serde(default = "default_branch_template")]
+    pub branch_template: String,
+}
+
+impl Default for GitConfig {
+    fn default() -> Self {
+        Self {
+            actions: default_actions(),
+            run_pre_commit: RunPreCommit::default(),
+            tag_template: default_tag_template(),
+            commit_template: default_commit_template(),
+            branch_template: default_branch_template(),
+        }
+    }
+}
+
+impl GitConfig {
+    pub fn has(&self, action: Action) -> bool {
+        self.actions.contains(&action)
+    }
+
+    pub fn validate(&self) -> Result<(), String> {
+        if self.has(Action::Tag) && !self.has(Action::Commit) {
+            return Err("git action 'tag' requires 'commit'".to_string());
+        }
+        if self.has(Action::Push) && !self.has(Action::Commit) {
+            return Err("git action 'push' requires 'commit'".to_string());
+        }
+        if self.has(Action::Pr) && !self.has(Action::Push) {
+            return Err("git action 'pr' requires 'push'".to_string());
+        }
+        if self.has(Action::Pr) && !self.has(Action::Branch) {
+            return Err("git action 'pr' requires 'branch'".to_string());
+        }
+        if self.has(Action::Tag) && self.has(Action::Branch) {
+            return Err("git actions 'tag' and 'branch' cannot coexist".to_string());
+        }
+        Ok(())
+    }
+}
+
+fn default_actions() -> Vec<Action> {
+    vec![Action::AddAll, Action::Commit, Action::Tag]
 }
 
 fn default_tag_template() -> String {
@@ -36,6 +79,10 @@ fn default_tag_template() -> String {
 
 fn default_commit_template() -> String {
     "Bump version from {current-version} to {new-version}".to_string()
+}
+
+fn default_branch_template() -> String {
+    "release/{new-version}".to_string()
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -72,12 +119,13 @@ pub enum RunPreCommit {
     WhenPresent,
 }
 
-#[derive(Debug, Deserialize, Serialize, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
-pub enum GitAction {
-    Disabled,
+pub enum Action {
+    AddAll,
+    Branch,
     Commit,
-    #[default]
-    CommitAndTag,
-    CommitTagAndPush,
+    Tag,
+    Push,
+    Pr,
 }

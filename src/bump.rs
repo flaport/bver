@@ -90,6 +90,9 @@ pub fn bump_version(config: &Config, target: &str, force: bool) -> Result<(), St
         apply_change(change)?;
     }
 
+    // Validate git config before running any git operations
+    config.git.validate()?;
+
     // Run pre-commit hooks if configured
     maybe_run_pre_commit(config.git.run_pre_commit)?;
 
