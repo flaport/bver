@@ -1,4 +1,5 @@
 use std::fs;
+use std::path::Path;
 use std::process::Command;
 
 use crate::finders::find_repo_root;
@@ -129,6 +130,7 @@ pub fn run_git_actions(
     current_version: &str,
     new_version: &str,
     force: bool,
+    changed_files: &[&Path],
 ) -> Result<(), String> {
     let tag_name = apply_template(&git_config.tag_template, current_version, new_version);
     let commit_msg = apply_template(&git_config.commit_template, current_version, new_version);
@@ -139,6 +141,8 @@ pub fn run_git_actions(
     }
     if git_config.has(Action::AddAll) {
         git_add_all()?;
+    } else if git_config.has(Action::Commit) {
+        git_add_files(changed_files)?;
     }
     if git_config.has(Action::Commit) {
         git_commit(&commit_msg)?;
@@ -161,6 +165,14 @@ pub fn run_git_actions(
 
 fn git_add_all() -> Result<(), String> {
     git(&["add", "--all"])
+}
+
+fn git_add_files(paths: &[&Path]) -> Result<(), String> {
+    for path in paths {
+        let path_str = path.to_str().ok_or_else(|| format!("Invalid path: {:?}", path))?;
+        git(&["add", path_str])?;
+    }
+    Ok(())
 }
 
 fn git_commit(msg: &str) -> Result<(), String> {

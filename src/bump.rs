@@ -96,8 +96,16 @@ pub fn bump_version(config: &Config, target: &str, force: bool) -> Result<(), St
     // Run pre-commit hooks if configured
     maybe_run_pre_commit(config.git.run_pre_commit)?;
 
+    // Collect unique changed file paths
+    let changed_files: Vec<&std::path::Path> = selected
+        .iter()
+        .map(|c| c.path.as_path())
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect();
+
     // Run git actions if configured
-    run_git_actions(&config.git, current_version, &new_version, force)?;
+    run_git_actions(&config.git, current_version, &new_version, force, &changed_files)?;
 
     Ok(())
 }
