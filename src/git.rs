@@ -134,11 +134,11 @@ pub fn run_git_actions(
     let commit_msg = apply_template(&git_config.commit_template, current_version, new_version);
     let branch_name = apply_template(&git_config.branch_template, current_version, new_version);
 
-    if git_config.has(Action::AddAll) {
-        git_add_all()?;
-    }
     if git_config.has(Action::Branch) {
         git_checkout_new_branch(&branch_name)?;
+    }
+    if git_config.has(Action::AddAll) {
+        git_add_all()?;
     }
     if git_config.has(Action::Commit) {
         git_commit(&commit_msg)?;
