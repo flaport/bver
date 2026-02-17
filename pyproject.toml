@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "bver-cli"
-version = "0.1.2"
+version = "0.1.3"
 description = "A bump-version tool for multi-language projects"
 requires-python = ">=3.9"
 
