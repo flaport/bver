@@ -152,7 +152,7 @@ pub fn run_git_actions(
     }
     if git_config.has(Action::Push) {
         let set_upstream = git_config.has(Action::Branch);
-        git_push(force, set_upstream)?;
+        git_push(force, set_upstream, &branch_name)?;
         if git_config.has(Action::Tag) {
             git_push_tag(&tag_name, force)?;
         }
@@ -189,11 +189,11 @@ fn git_tag(tag_name: &str, version: &str, force: bool) -> Result<(), String> {
     }
 }
 
-fn git_push(force: bool, set_upstream: bool) -> Result<(), String> {
+fn git_push(force: bool, set_upstream: bool, branch: &str) -> Result<(), String> {
     match (force, set_upstream) {
-        (true, true) => git(&["push", "-u", "--force"]),
+        (true, true) => git(&["push", "-u", "origin", branch, "--force"]),
         (true, false) => git(&["push", "--force"]),
-        (false, true) => git(&["push", "-u"]),
+        (false, true) => git(&["push", "-u", "origin", branch]),
         (false, false) => git(&["push"]),
     }
 }
