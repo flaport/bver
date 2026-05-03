@@ -29,7 +29,7 @@ fn pretty_path(path: &Path) -> String {
     }
 }
 
-pub fn bump_version(config: &Config, target: &str, force: bool) -> Result<(), String> {
+pub fn bump_version(config: &Config, target: &str, force: bool, yes: bool) -> Result<(), String> {
     let current_version = config
         .current_version
         .as_ref()
@@ -69,13 +69,15 @@ pub fn bump_version(config: &Config, target: &str, force: bool) -> Result<(), St
         return Ok(());
     }
 
-    // Show TUI to select changes
-    let confirmed = select_changes(&mut proposed_changes)
-        .map_err(|e| format!("TUI error: {e}"))?;
+    // Show TUI to select changes (skipped when --yes/-y is passed)
+    if !yes {
+        let confirmed = select_changes(&mut proposed_changes)
+            .map_err(|e| format!("TUI error: {e}"))?;
 
-    if !confirmed {
-        println!("Cancelled.");
-        return Ok(());
+        if !confirmed {
+            println!("Cancelled.");
+            return Ok(());
+        }
     }
 
     // Apply selected changes
