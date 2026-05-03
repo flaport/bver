@@ -12,13 +12,26 @@ jobs:
         include:
           - os: ubuntu-latest
             cibw_archs: "native"
+            artifact_name: "wheels-ubuntu-x86_64"
+          - os: ubuntu-latest
+            cibw_archs: "aarch64"
+            artifact_name: "wheels-ubuntu-aarch64"
           - os: windows-latest
             cibw_archs: "native"
+            artifact_name: "wheels-windows"
           - os: macos-latest
             cibw_archs: "native arm64"
+            artifact_name: "wheels-macos"
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up QEMU (for Linux aarch64 cross-compilation)
+        if: matrix.cibw_archs == 'aarch64'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
       - uses: pypa/cibuildwheel@v3.3.1
         env:
           CIBW_ARCHS: ${{ matrix.cibw_archs }}
@@ -30,7 +43,7 @@ jobs:
           CIBW_SKIP: "*-musllinux* pp*"
       - uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.os }}
+          name: ${{ matrix.artifact_name }}
           path: ./wheelhouse/*.whl
 
   publish:
@@ -43,7 +56,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: wheels-*
+          pattern: "wheels-*"
           path: dist
           merge-multiple: true
       - uses: pypa/gh-action-pypi-publish@release/v1
