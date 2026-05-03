@@ -41,6 +41,10 @@ enum Commands {
         /// Force git operations (tag, push)
         #[arg(short, long)]
         force: bool,
+
+        /// Skip interactive TUI and apply all changes
+        #[arg(short = 'y', long)]
+        yes: bool,
     },
 }
 
@@ -78,9 +82,9 @@ fn run_from(cli: Cli) {
                 eprintln!("No config found");
             }
         }
-        Commands::Bump { target, force } => {
+        Commands::Bump { target, force, yes } => {
             if let Some(config) = config {
-                if let Err(e) = bump_version(&config, &target, force) {
+                if let Err(e) = bump_version(&config, &target, force, yes) {
                     eprintln!("Error: {e}");
                 }
             } else {
